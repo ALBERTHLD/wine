@@ -1,0 +1,11 @@
+{
+  "name": "wine-cellar-manager",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "build": "echo 'Static SPA bundle ready for publish'",
+    "check": "node --check app.js && node --check server.js"
+  }
+}
