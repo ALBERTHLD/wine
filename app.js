@@ -1,5 +1,6 @@
-const STORAGE_KEY = 'winecellar.v4';
-const SESSION_KEY = 'winecellar.session';
+const STORAGE_KEY = 'winecellar.v5';
+const USERS_KEY = 'winecellar.users.v1';
+const SESSION_KEY = 'winecellar.session.v2';
 
 const OPTIONS = {
   countries: ['Danmark', 'Frankrig', 'Italien', 'Spanien', 'Tyskland', 'USA', 'Argentina', 'Chile', 'Australien', 'Østrig'],
@@ -32,36 +33,55 @@ const countryFlags = {
 };
 
 const seed = { wines: [], purchases: [], drinkLogs: [] };
+const seedUsers = [{ id: 'admin-default', username: 'AdminAlbert', email: 'admin@vinlager.local', password: 'Start123', role: 'admin', active: true }];
+
 const uid = () => Math.random().toString(36).slice(2, 10);
 
 const store = () => {
-  try { return { ...seed, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }; }
-  catch { return seed; }
+  try {
+    return { ...seed, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') };
+  } catch {
+    return seed;
+  }
 };
 const save = (s) => localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
 
-const session = () => localStorage.getItem(SESSION_KEY);
-const setSession = (username) => localStorage.setItem(SESSION_KEY, username);
-const clearSession = () => localStorage.removeItem(SESSION_KEY);
+function usersStore() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(USERS_KEY) || 'null');
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch {}
+  localStorage.setItem(USERS_KEY, JSON.stringify(seedUsers));
+  return seedUsers;
+}
+function saveUsers(users) { localStorage.setItem(USERS_KEY, JSON.stringify(users)); }
+function getSession() {
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch { return null; }
+}
+function setSession(userId) { localStorage.setItem(SESSION_KEY, JSON.stringify({ userId })); }
+function clearSession() { localStorage.removeItem(SESSION_KEY); }
+function currentUser() {
+  const sess = getSession();
+  if (!sess?.userId) return null;
+  return usersStore().find((u) => u.id === sess.userId && u.active);
+}
 
 const money = (n) => `${Number(n || 0).toFixed(2)} DKK`;
 const label = (text, field) => `<label><span>${text}</span>${field}</label>`;
 const input = (name, type = 'text', value = '', required = false, min = '') => `<input class="input" name="${name}" type="${type}" value="${value || ''}" ${required ? 'required' : ''} ${min !== '' ? `min="${min}"` : ''}/>`;
 const select = (name, options, value = '', required = false, extra = []) => `<select class="input" name="${name}" ${required ? 'required' : ''}><option value="">Vælg...</option>${options.map((o) => `<option value="${o}" ${o === value ? 'selected' : ''}>${o}</option>`).join('')}${extra.map((x) => `<option value="${x}" ${x === value ? 'selected' : ''}>${x}</option>`).join('')}</select>`;
 
-function pill(path, text, active) {
-  return `<a href="${path}" class="pill ${active === path ? 'active' : ''}" data-link>${text}</a>`;
-}
+function pill(path, text, active) { return `<a href="${path}" class="pill ${active === path ? 'active' : ''}" data-link>${text}</a>`; }
 
 function shell(content, active = '/') {
+  const user = currentUser();
   return `
-    <header class="topbar"><div class="container top-row"><h1>Vinlager Manager</h1><nav>${pill('/', 'Dashboard', active)}${pill('/wines', 'Alle vine', active)}${pill('/new', 'Tilføj data', active)}<button class="pill" id="logoutBtn">Log ud</button></nav></div></header>
+    <header class="topbar"><div class="container top-row"><h1>Vinlager Manager</h1><nav>${pill('/', 'Dashboard', active)}${pill('/wines', 'Alle vine', active)}${pill('/new', 'Tilføj data', active)}${pill('/profile', 'Profil', active)}${user?.role === 'admin' ? pill('/admin', 'Admin', active) : ''}<button class="pill" id="logoutBtn">Log ud</button></nav></div></header>
     <main class="container">${content}</main>
   `;
 }
 
 function navigate(path) { history.pushState({}, '', path); render(); }
-
 document.addEventListener('click', (e) => {
   const a = e.target.closest('[data-link]');
   if (!a) return;
@@ -93,10 +113,9 @@ function getWineStats(s, wineId) {
 }
 
 function aggregateDashboard(s) {
-  const totals = { bottlesLeft: 0, inventoryValue: 0, cellarValue: 0, storageValue: 0, winesInCellar: new Set(), winesInStorage: new Set() };
+  const totals = { inventoryValue: 0, cellarValue: 0, storageValue: 0, winesInCellar: new Set(), winesInStorage: new Set() };
   s.wines.forEach((w) => {
     const st = getWineStats(s, w.id);
-    totals.bottlesLeft += st.left;
     totals.inventoryValue += st.inventoryValue;
     st.buckets.forEach((b) => {
       const locValue = Number(b.qtyLeft || 0) * Number(b.price || 0);
@@ -115,6 +134,7 @@ function aggregateDashboard(s) {
 
 function dashboard(s) {
   const agg = aggregateDashboard(s);
+  const bottlesLeft = agg.winesInStorage.size + agg.winesInCellar.size;
   const latest = [...s.drinkLogs].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)).slice(0, 5)
     .map((log) => {
       const w = s.wines.find((x) => x.id === log.wineId);
@@ -126,7 +146,7 @@ function dashboard(s) {
     <section class="grid cols3">
       <article class="card"><small>Antal vine i Vinlager</small><h3>${agg.winesInStorage.size}</h3></article>
       <article class="card"><small>Antal vine i Kælder</small><h3>${agg.winesInCellar.size}</h3></article>
-      <article class="card"><small>Flasker tilbage</small><h3>${agg.bottlesLeft}</h3></article>
+      <article class="card"><small>Flasker tilbage</small><h3>${bottlesLeft}</h3></article>
     </section>
     <section class="grid cols3">
       <article class="card"><small>Samlet lager værdi</small><h3>${money(agg.inventoryValue)}</h3></article>
@@ -234,6 +254,55 @@ function tastingDetailPage(s, id) {
   `, '/');
 }
 
+function profilePage() {
+  const user = currentUser();
+  return shell(`
+    <section class="card"><h2>Min profil</h2>
+      <form id="profileForm" class="grid cols2">
+        ${label('Brugernavn', input('username', 'text', user?.username || '', true))}
+        ${label('Email', input('email', 'email', user?.email || '', true))}
+        ${label('Nyt kodeord', input('password', 'password', '', false))}
+        <div></div>
+        <button class="btn" type="submit">Gem profil</button>
+      </form>
+      <p class="muted">Lad kodeord stå tomt for at beholde nuværende kodeord.</p>
+      <p id="profileStatus" class="muted"></p>
+    </section>
+  `, '/profile');
+}
+
+function adminPage() {
+  const users = usersStore();
+  return shell(`
+    <section class="card"><h2>Admin: Brugerstyring</h2>
+      <p><b>Standard admin login:</b> Navn <code>AdminAlbert</code>, kode <code>Start123</code> (kan ændres her).</p>
+      <div class="grid cols2">
+        <form id="adminCreateUserForm">
+          <h3>Opret bruger</h3>
+          ${label('Brugernavn', input('username', 'text', '', true))}
+          ${label('Email', input('email', 'email', '', true))}
+          ${label('Kodeord', input('password', 'text', '', true))}
+          ${label('Rolle', select('role', ['user', 'admin'], 'user', true))}
+          <button class="btn" type="submit">Opret bruger</button>
+        </form>
+        <form id="adminEditUserForm">
+          <h3>Redigér bruger</h3>
+          ${label('Vælg bruger', `<select class="input" name="userId" required><option value="">Vælg...</option>${users.map((u) => `<option value="${u.id}">${u.username} (${u.role})</option>`).join('')}</select>`)}
+          ${label('Nyt brugernavn', input('username', 'text'))}
+          ${label('Ny email', input('email', 'email'))}
+          ${label('Nyt kodeord', input('password', 'text'))}
+          ${label('Rolle', select('role', ['user', 'admin']))}
+          ${label('Aktiv', select('active', ['Ja', 'Nej'], 'Ja'))}
+          <button class="btn" type="submit">Gem brugerændringer</button>
+        </form>
+      </div>
+      <h3>Brugeroversigt</h3>
+      <div class="card">${users.map((u) => `<p><b>${u.username}</b> · ${u.email} · rolle: ${u.role} · ${u.active ? 'aktiv' : 'deaktiveret'}</p>`).join('')}</div>
+      <p id="adminStatus" class="muted"></p>
+    </section>
+  `, '/admin');
+}
+
 function customSelectBlock(prefix, labelText, options) {
   return `${label(labelText, select(prefix, options, '', true, ['Andet (skriv selv)']))}<div id="${prefix}CustomWrap" style="display:none">${label(`Skriv ${labelText.toLowerCase()}`, input(`${prefix}Custom`, 'text'))}</div>`;
 }
@@ -264,7 +333,7 @@ function newPage() {
 
 function loginPage() {
   return `
-    <main class="login-main"><section class="login-card"><h1>Vinlager Manager</h1><p>Log ind for at få adgang til dit vinlager.</p><form id="loginForm">${label('Brugernavn', input('username', 'text', '', true))}${label('Kodeord', input('password', 'password', '', true))}<button class="btn" type="submit">Log ind</button></form></section></main>
+    <main class="login-main"><section class="login-card"><h1>Vinlager Manager</h1><p>Log ind for at få adgang til dit vinlager.</p><p class="muted">Admin-login: <b>AdminAlbert</b> / <b>Start123</b></p><form id="loginForm">${label('Brugernavn', input('username', 'text', '', true))}${label('Kodeord', input('password', 'password', '', true))}<button class="btn" type="submit">Log ind</button></form><p id="loginStatus" class="muted"></p></section></main>
   `;
 }
 
@@ -323,11 +392,81 @@ function attachHandlers(path, s) {
 
   if (path === '/login') {
     const form = document.getElementById('loginForm');
+    const status = document.getElementById('loginStatus');
     if (form) form.onsubmit = (e) => {
       e.preventDefault();
       const fd = new FormData(form);
-      setSession(fd.get('username'));
+      const username = fd.get('username');
+      const password = fd.get('password');
+      const user = usersStore().find((u) => u.username === username && u.password === password && u.active);
+      if (!user) {
+        status.textContent = 'Forkert login eller bruger er deaktiveret.';
+        return;
+      }
+      setSession(user.id);
       navigate('/');
+    };
+  }
+
+  if (path === '/profile') {
+    const form = document.getElementById('profileForm');
+    const status = document.getElementById('profileStatus');
+    if (form) form.onsubmit = (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const me = currentUser();
+      const users = usersStore();
+      const idx = users.findIndex((u) => u.id === me.id);
+      if (idx < 0) return;
+      users[idx].username = fd.get('username');
+      users[idx].email = fd.get('email');
+      if (fd.get('password')) users[idx].password = fd.get('password');
+      saveUsers(users);
+      status.textContent = 'Profil opdateret.';
+      render();
+    };
+  }
+
+  if (path === '/admin') {
+    const me = currentUser();
+    if (me?.role !== 'admin') return;
+    const status = document.getElementById('adminStatus');
+
+    const createForm = document.getElementById('adminCreateUserForm');
+    if (createForm) createForm.onsubmit = (e) => {
+      e.preventDefault();
+      const fd = new FormData(createForm);
+      const users = usersStore();
+      if (users.some((u) => u.username === fd.get('username'))) {
+        status.textContent = 'Brugernavn findes allerede.';
+        return;
+      }
+      users.push({ id: uid(), username: fd.get('username'), email: fd.get('email'), password: fd.get('password'), role: fd.get('role') || 'user', active: true });
+      saveUsers(users);
+      status.textContent = 'Bruger oprettet.';
+      render();
+    };
+
+    const editForm = document.getElementById('adminEditUserForm');
+    if (editForm) editForm.onsubmit = (e) => {
+      e.preventDefault();
+      const fd = new FormData(editForm);
+      const users = usersStore();
+      const idx = users.findIndex((u) => u.id === fd.get('userId'));
+      if (idx < 0) return;
+      if (fd.get('username')) users[idx].username = fd.get('username');
+      if (fd.get('email')) users[idx].email = fd.get('email');
+      if (fd.get('password')) users[idx].password = fd.get('password');
+      if (fd.get('role')) users[idx].role = fd.get('role');
+      users[idx].active = fd.get('active') !== 'Nej';
+      saveUsers(users);
+      if (users[idx].id === currentUser()?.id && !users[idx].active) {
+        clearSession();
+        navigate('/login');
+        return;
+      }
+      status.textContent = 'Bruger opdateret.';
+      render();
     };
   }
 
@@ -461,14 +600,22 @@ function attachHandlers(path, s) {
 }
 
 function render() {
-  const s = store();
-  const path = location.pathname;
+  usersStore();
 
-  if (!session() && path !== '/login') {
+  if (!currentUser() && location.pathname !== '/login') {
     history.replaceState({}, '', '/login');
   }
 
+  const s = store();
   const current = location.pathname;
+  const user = currentUser();
+
+  if (current === '/admin' && user?.role !== 'admin') {
+    document.getElementById('app').innerHTML = shell('<section class="card"><h2>Ingen adgang</h2><p>Kun administratorer kan se denne side.</p></section>', '/');
+    attachHandlers('/', s);
+    return;
+  }
+
   let html = '';
   if (current === '/login') html = loginPage();
   else if (current === '/') html = dashboard(s);
@@ -476,6 +623,8 @@ function render() {
   else if (current.startsWith('/wines/')) html = wineDetail(s, current.split('/')[2]);
   else if (current.startsWith('/tastings/')) html = tastingDetailPage(s, current.split('/')[2]);
   else if (current === '/new') html = newPage();
+  else if (current === '/profile') html = profilePage();
+  else if (current === '/admin') html = adminPage();
   else html = shell('<p>Side ikke fundet.</p>');
 
   document.getElementById('app').innerHTML = html;
