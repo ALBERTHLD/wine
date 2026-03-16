@@ -1,51 +1,62 @@
 # Vinlager Manager
 
-MVP til personligt vinlager med login, email-verifikation, brugerstyring, registrering, redigering og smagningshistorik.
+Vinlager Manager er en SPA med tydelig datamodel (`Wine`, `Purchase`, `InventoryEvent`) og fokus på hurtig oprettelse, korrekt købshåndtering og stærkere dashboard-analyser.
 
-## Login og roller
+## Datamodel
 
-- Standard admin-bruger:
-  - Brugernavn: `AdminAlbert`
-  - Kodeord: `Start123`
-- Admin-kontoen er dedikeret til brugerstyring på `/admin`.
-- Nye brugere oprettes med email, og email skal verificeres før login.
+- **Wine**: stamdata for unik vin (producent, navn, årgang m.m.).
+- **Purchase**: transaktioner knyttet til eksisterende vin.
+- **InventoryEvent**: lagerhændelser (`purchase`, `add`, `remove`, `archive`, `reactivate`).
+
+## Auth og roller
+
+- Standard admin: `AdminAlbert` / `Start123`.
+- Admin bruges primært til brugerstyring på `/admin`.
+- Nye brugere oprettes med email og skal verificere email før login.
 
 ## Sider
 
-- `/login` Login + opret bruger + email-verifikation
-- `/` Dashboard (for almindelige brugere)
-- `/wines` Alle vine + filtrering/sortering/eksport
-- `/wines/:id` Vin-detalje + redigering + smagningshistorik
-- `/tastings/:id` Detaljeside for en specifik smagning
-- `/new` Opret vin + første køb i samme flow + import/bulk upload
-- `/profile` Opdater brugernavn, email og kodeord
-- `/admin` Brugerstyring (kun admin)
+- `/login` login + registrering + email-verifikation
+- `/` dashboard og analyser
+- `/wines` alle vine med filtre/sortering
+- `/wines/:id` detaljeside
+- `/wines/:id/edit` dedikeret redigeringsside med lagerregulering
+- `/tastings/:id` smagningsdetaljer
+- `/new` opret vin + første køb + scan etiket + import preview
+- `/profile` profilopdatering
+- `/admin` brugerstyring
 
-## Nøglefunktioner
+## Centrale funktioner
 
-- Rollebaseret login med users/session i localStorage.
-- Små landeflag vises på vinkort og detaljeside.
-- Hvis land, region eller drue ikke findes i dropdown, kan man vælge “Andet (skriv selv)”.
-- Datofelter bruger `type=date`, år felter bruger `type=number`.
-- Dashboard KPI:
-  - Flasker i Vinlager
-  - Flasker i Kælder
-  - Flasker tilbage = sum af de to ovenfor
-- “Flasker der snart bør drikkes” med markering:
-  - `Drik nu` (rød)
-  - `Drik løbende` (orange)
-  - `For ung` (grøn)
-- Smagningshistorik kan klikkes, så hver smagning åbnes på egen detaljeside.
-- Bulk upload via importfil + download af importark.
-- CSV-eksport af lager fra siden “Alle vine”.
+- Dedup på `producent + vinens navn + årgang` ved nyt køb.
+- Flere køb af samme vin opretter nyt køb (ikke ny vinpost).
+- Lagerregulering (tilføj/fjern) med validering + historik.
+- Soft-delete via status (`aktiv`/`ude`) med reaktivering.
+- Drikkevindue-regelmotor (intern, transparent) med forslag direkte i formular.
+- “Scan etiket” via provider-adapterlag (valgfri integration, non-blocking fallback).
+- Nye felter: `flaskevolumen_ml`, `emballagestatus`.
+- Dashboard med analyser:
+  - flasker pr. vintype
+  - flasker pr. land
+  - værdi pr. placering
+  - statusbar (klar nu / for tidlig / over vindue / ukendt)
+  - flasker pr. volumen
+  - vine pr. emballage
+  - klar til at drikke nu/løbende
+  - lav beholdning
+  - seneste køb
+- Import preview med validering, fejlrapport og resumetal.
+- Eksport af aktive/alle vine i CSV og XLSX-kompatibel fil.
+
+## Importkolonner (template)
+
+`producent, vinens_navn, årgang, land, region, appellation, primær_drue, vintype, antal_flasker, pris_per_flaske, placering, drikkevindue_fra, drikkevindue_til, købsdato, valuta, forhandler, flaskevolumen_ml, emballagestatus, blend, generelle_noter, status`
 
 ## Kør lokalt
 
 ```bash
 npm run dev
 ```
-
-Åbn derefter `http://localhost:4173`.
 
 ## Checks
 
