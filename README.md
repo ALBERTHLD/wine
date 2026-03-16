@@ -1,18 +1,19 @@
 # Vinlager Manager
 
-MVP til personligt vinlager med login, brugerstyring, registrering, redigering og smagningshistorik.
+MVP til personligt vinlager med login, email-verifikation, brugerstyring, registrering, redigering og smagningshistorik.
 
-## Login
+## Login og roller
 
 - Standard admin-bruger:
   - Brugernavn: `AdminAlbert`
   - Kodeord: `Start123`
-- Admin-brugeren kan ændres via profil/admin-sider.
+- Admin-kontoen er dedikeret til brugerstyring på `/admin`.
+- Nye brugere oprettes med email, og email skal verificeres før login.
 
 ## Sider
 
-- `/login` Simpel login-side
-- `/` Dashboard med lager-værdi og fordeling på Vinlager/Kælder
+- `/login` Login + opret bruger + email-verifikation
+- `/` Dashboard (for almindelige brugere)
 - `/wines` Alle vine + filtrering/sortering/eksport
 - `/wines/:id` Vin-detalje + redigering + smagningshistorik
 - `/tastings/:id` Detaljeside for en specifik smagning
@@ -22,14 +23,18 @@ MVP til personligt vinlager med login, brugerstyring, registrering, redigering o
 
 ## Nøglefunktioner
 
-- Reelt login med users/session i localStorage (rollebaseret adgang).
+- Rollebaseret login med users/session i localStorage.
 - Små landeflag vises på vinkort og detaljeside.
 - Hvis land, region eller drue ikke findes i dropdown, kan man vælge “Andet (skriv selv)”.
 - Datofelter bruger `type=date`, år felter bruger `type=number`.
-- Automatisk flaskestatus: købte minus drukkede flasker.
-- Dashboard viser samlet lager værdi og værdi opdelt på Vinlager og Kælder.
-- Dashboard viser antal vine opdelt på Vinlager og Kælder.
-- Flasker tilbage følger ønsket logik: sum af antal vine i Vinlager og antal vine i Kælder.
+- Dashboard KPI:
+  - Flasker i Vinlager
+  - Flasker i Kælder
+  - Flasker tilbage = sum af de to ovenfor
+- “Flasker der snart bør drikkes” med markering:
+  - `Drik nu` (rød)
+  - `Drik løbende` (orange)
+  - `For ung` (grøn)
 - Smagningshistorik kan klikkes, så hver smagning åbnes på egen detaljeside.
 - Bulk upload via importfil + download af importark.
 - CSV-eksport af lager fra siden “Alle vine”.
