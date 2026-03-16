@@ -1,6 +1,6 @@
 # Vinlager Manager
 
-Vinlager Manager er en SPA med tydelig datamodel (`Wine`, `Purchase`, `InventoryEvent`) og fokus på hurtig oprettelse, korrekt købshåndtering og stærkere dashboard-analyser.
+Vinlager Manager er en SPA med tydelig datamodel (`Wine`, `Purchase`, `InventoryEvent`) og fokus på hurtig manuel oprettelse, korrekt købshåndtering og beslutningsstøtte på dashboard.
 
 ## Datamodel
 
@@ -8,10 +8,10 @@ Vinlager Manager er en SPA med tydelig datamodel (`Wine`, `Purchase`, `Inventory
 - **Purchase**: transaktioner knyttet til eksisterende vin.
 - **InventoryEvent**: lagerhændelser (`purchase`, `add`, `remove`, `archive`, `reactivate`).
 
-## Auth og roller
+## Login og roller
 
 - Standard admin: `AdminAlbert` / `Start123`.
-- Admin bruges primært til brugerstyring på `/admin`.
+- Admin bruges til brugerstyring på `/admin`.
 - Nye brugere oprettes med email og skal verificere email før login.
 
 ## Sider
@@ -22,7 +22,7 @@ Vinlager Manager er en SPA med tydelig datamodel (`Wine`, `Purchase`, `Inventory
 - `/wines/:id` detaljeside
 - `/wines/:id/edit` dedikeret redigeringsside med lagerregulering
 - `/tastings/:id` smagningsdetaljer
-- `/new` opret vin + første køb + scan etiket + import preview
+- `/new` opret vin + første køb + import/eksport
 - `/profile` profilopdatering
 - `/admin` brugerstyring
 
@@ -32,21 +32,14 @@ Vinlager Manager er en SPA med tydelig datamodel (`Wine`, `Purchase`, `Inventory
 - Flere køb af samme vin opretter nyt køb (ikke ny vinpost).
 - Lagerregulering (tilføj/fjern) med validering + historik.
 - Soft-delete via status (`aktiv`/`ude`) med reaktivering.
-- Drikkevindue-regelmotor (intern, transparent) med forslag direkte i formular.
-- “Scan etiket” via provider-adapterlag (valgfri integration, non-blocking fallback).
-- Nye felter: `flaskevolumen_ml`, `emballagestatus`.
-- Dashboard med analyser:
-  - flasker pr. vintype
-  - flasker pr. land
-  - værdi pr. placering
-  - statusbar (klar nu / for tidlig / over vindue / ukendt)
-  - flasker pr. volumen
-  - vine pr. emballage
-  - klar til at drikke nu/løbende
-  - lav beholdning
-  - seneste køb
+- Intern drikkevindue-regelmotor med 1.5x skalerede regler.
+- WSET Level 2-orienteret smagning:
+  - quality, sweetness, acidity, tannin, alcohol, body, aroma intensity, flavour intensity, finish
+  - development level
+  - descriptor-struktur: primær/sekundær/tertiær
+- Dashboard-analyser inkl. “Klar til at drikke nu/løbende” og “Seneste smagning”.
 - Import preview med validering, fejlrapport og resumetal.
-- Eksport af aktive/alle vine i CSV og XLSX-kompatibel fil.
+- CSV/XLSX template + import og eksport (fra opret/import-sektionen).
 
 ## Importkolonner (template)
 
