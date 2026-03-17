@@ -1,6 +1,6 @@
+import { login as identityLogin, signup as identitySignup, logout as identityLogout, getUser, handleAuthCallback, requestPasswordRecovery, updateUser, onAuthChange, AUTH_EVENTS, AuthError } from '@netlify/identity';
+
 const STORAGE_KEY = 'winecellar.v8';
-const USERS_KEY = 'winecellar.users.v3';
-const SESSION_KEY = 'winecellar.session.v4';
 const RULE_SCALE = 1.5;
 
 const WINE_REGIONS_BY_COUNTRY = {
@@ -98,19 +98,21 @@ const REGION_RULES = [
 const countryFlags = { Frankrig:'🇫🇷', Italien:'🇮🇹', Spanien:'🇪🇸', Tyskland:'🇩🇪', Portugal:'🇵🇹', USA:'🇺🇸', Australien:'🇦🇺', Argentina:'🇦🇷', Chile:'🇨🇱', Danmark:'🇩🇰', Østrig:'🇦🇹', 'New Zealand':'🇳🇿', Grækenland:'🇬🇷', Ungarn:'🇭🇺', Georgien:'🇬🇪', Schweiz:'🇨🇭' };
 
 const seedData = { wines: [], purchases: [], inventoryEvents: [], drinkLogs: [] };
-const seedUsers = [{ id: 'admin-default', username: 'AdminAlbert', email: 'admin@vinlager.local', password: 'Start123', role: 'admin', active: true, verified: true }];
+
+let _identityUser = null;
+let _authCallbackResult = null;
+
+function mapIdentityUser(u) {
+  if (!u) return null;
+  return { id: u.id, email: u.email, username: u.user_metadata?.full_name || u.email?.split('@')[0] || '', role: (u.app_metadata?.roles || []).includes('admin') ? 'admin' : 'user', _raw: u };
+}
+const currentUser = () => _identityUser;
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const money = (n) => `${Number(n || 0).toFixed(2)} DKK`;
 
 const store = () => { try { return { ...seedData, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }; } catch { return seedData; } };
 const save = (s) => localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-const usersStore = () => { try { const u = JSON.parse(localStorage.getItem(USERS_KEY) || 'null'); if (Array.isArray(u) && u.length) return u; } catch {} localStorage.setItem(USERS_KEY, JSON.stringify(seedUsers)); return seedUsers; };
-const saveUsers = (u) => localStorage.setItem(USERS_KEY, JSON.stringify(u));
-const getSession = () => { try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch { return null; } };
-const setSession = (userId) => localStorage.setItem(SESSION_KEY, JSON.stringify({ userId }));
-const clearSession = () => localStorage.removeItem(SESSION_KEY);
-const currentUser = () => { const id = getSession()?.userId; return id ? usersStore().find((u) => u.id === id && u.active) : null; };
 
 const normalize = (v='') => v.trim().toLowerCase().replace(/\s+/g, ' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const normalizeKey = (w) => `${normalize(w.producer)}|${normalize(w.wineName)}|${String(w.vintage || '').trim()}`;
@@ -190,9 +192,7 @@ function suggestDrinkWindow({ wineType, region, primaryGrape, vintage, agingCate
 
 function shell(content, active='/') {
   const u = currentUser();
-  const nav = u?.role === 'admin'
-    ? `${pill('/admin', 'Admin', active)}`
-    : `${pill('/', 'Dashboard', active)}${pill('/wines', 'Alle vine', active)}${pill('/new', 'Opret vin + køb', active)}${pill('/profile', 'Profil', active)}`;
+  const nav = `${pill('/', 'Dashboard', active)}${pill('/wines', 'Alle vine', active)}${pill('/new', 'Opret vin + køb', active)}${pill('/profile', 'Profil', active)}${u?.role === 'admin' ? pill('/admin', 'Admin', active) : ''}`;
   return `<header class="topbar"><div class="container top-row"><h1>Vinlager Manager</h1><nav>${nav}<button id="logoutBtn" class="pill logout-btn">Log ud</button></nav></div></header><main class="container">${content}</main>`;
 }
 
@@ -375,15 +375,19 @@ function tastingDetailPage(s,id){
   return shell(`<article class="card"><a href="/wines/${t.wineId}" data-link>← Tilbage til vin</a><h2>Smagningsdetaljer (WSET Level 2)</h2><p><b>Vin:</b> ${w?`${w.producer} ${w.wineName}`:'Ukendt'}</p><h3>Struktur</h3><p>Dato: ${t.date}</p><p>Antal flasker åbnet: ${t.bottlesConsumed}</p><p>Kvalitet: ${t.quality}</p><p>Udviklingsniveau: ${t.developmentLevel}</p><p>Sødhed: ${t.sweetness}</p><p>Syre: ${t.acidity}</p><p>Tannin: ${t.tannin}</p><p>Alkohol: ${t.alcohol}</p><p>Krop: ${t.body}</p><p>Aroma intensitet: ${t.aromaIntensity}</p><p>Smags intensitet: ${t.flavourIntensity}</p><p>Finish: ${t.finish}</p><h3>Primære karakteristika</h3><p>Frugt: ${arr('primaryFruit')}</p><p>Blomst: ${arr('primaryFloral')}</p><p>Krydderi: ${arr('primarySpice')}</p><p>Andre: ${arr('primaryOther')}</p><h3>Sekundære karakteristika</h3><p>Fadpræg: ${arr('secondaryOak')}</p><p>Gær/autolyse: ${arr('secondaryYeast')}</p><p>Vinifikationspræg: ${arr('secondaryVinification')}</p><h3>Tertiære karakteristika</h3><p>${arr('tertiary')}</p><h3>Supplerende felter</h3><p>Med mad: ${t.withFood||'Nej'}</p><p>Madnote: ${t.foodPairing||'-'}</p><p>Note: ${t.notes||'-'}</p></article>`, '/');
 }
 
-function profilePage(){ const u=currentUser(); return shell(`<section class="card"><h2>Min profil</h2><form id="profileForm" class="grid cols2">${label('Brugernavn',input('username','text',u?.username||'',true))}${label('Email',input('email','email',u?.email||'',true))}${label('Nyt kodeord',input('password','password','',false))}<div></div><button class="btn" type="submit">Gem profil</button></form><p id="profileStatus" class="muted"></p></section>`, '/profile'); }
+function profilePage(){ const u=currentUser(); return shell(`<section class="card"><h2>Min profil</h2><form id="profileForm" class="grid cols2">${label('Visningsnavn',input('username','text',u?.username||'',true))}${label('Email',`<input class="input" name="email" type="email" value="${u?.email||''}" disabled/>`)}<div><span class="muted" style="font-size:13px">Email kan ikke ændres herfra.</span></div>${label('Nyt kodeord',input('password','password','',false))}<div></div><button class="btn" type="submit">Gem profil</button></form><p id="profileStatus" class="muted"></p></section>`, '/profile'); }
 
 function adminPage(){
-  const users = usersStore();
-  return shell(`<section class="card"><h2>Admin: Brugerstyring</h2><div class="grid cols2"><form id="adminCreateUserForm"><h3>Opret bruger</h3>${label('Email',input('email','email','',true))}${label('Brugernavn',input('username','text','',true))}${label('Kodeord',input('password','text','',true))}${label('Rolle',select('role',['user','admin'],'user',true))}<button class="btn" type="submit">Opret</button></form><form id="adminEditUserForm"><h3>Redigér bruger</h3>${label('Vælg bruger',`<select class="input" name="userId" required><option value="">Vælg...</option>${users.map((u)=>`<option value="${u.id}">${u.username} (${u.role})</option>`).join('')}</select>`)}${label('Ny email',input('email','email'))}${label('Nyt brugernavn',input('username'))}${label('Nyt kodeord',input('password'))}${label('Rolle',select('role',['user','admin']))}${label('Aktiv',select('active',['Ja','Nej'],'Ja'))}${label('Verificeret',select('verified',['Ja','Nej'],'Ja'))}<button class="btn" type="submit">Gem</button></form></div><h3>Brugeroversigt</h3><div class="card">${users.map((u)=>`<p>${u.username} · ${u.email} · ${u.role} · ${u.verified?'verificeret':'ikke verificeret'} · ${u.active?'aktiv':'deaktiveret'}</p>`).join('')}</div><p id="adminStatus" class="muted"></p></section>`, '/admin');
+  const u = currentUser();
+  return shell(`<section class="card"><h2>Administration</h2><p>Logget ind som: <b>${u?.username || u?.email}</b> (${u?.role})</p><div class="card"><h3>Brugerstyring</h3><p class="muted">Brugere administreres via Netlify Identity-dashboardet.</p><p>Gå til <b>Project configuration &rarr; Identity</b> i Netlify for at oprette, redigere og slette brugere samt tildele roller.</p></div></section>`, '/admin');
 }
 
 function loginPage(){
-  return `<main class="login-main"><section class="login-card"><h1>Vinlager Manager</h1><p>Log ind for at få adgang.</p><form id="loginForm">${label('Brugernavn',input('username','text','',true))}${label('Kodeord',input('password','password','',true))}<button class="btn" type="submit">Log ind</button></form><p id="loginStatus" class="muted"></p><hr/><h3>Opret bruger</h3><form id="registerForm">${label('Email',input('email','email','',true))}${label('Brugernavn',input('username','text','',true))}${label('Kodeord',input('password','password','',true))}<button class="btn" type="submit">Opret profil</button></form><p id="registerStatus" class="muted"></p><h3>Verificér email</h3><form id="verifyForm">${label('Email',input('email','email','',true))}${label('Verifikationskode',input('code','text','',true))}<button class="btn" type="submit">Verificér</button></form><p id="verifyStatus" class="muted"></p></section></main>`;
+  const showReset = _authCallbackResult?.type === 'recovery';
+  if (showReset) {
+    return `<main class="login-main"><section class="login-card"><div class="login-header"><h1>Vinlager Manager</h1><p class="muted">Nulstil dit kodeord</p></div><div id="resetPanel"><form id="resetForm">${label('Nyt kodeord (min. 6 tegn)',input('password','password','',true))}<button class="btn login-submit-btn" type="submit">Opdater kodeord</button></form><p id="resetStatus" class="login-status"></p></div></section></main>`;
+  }
+  return `<main class="login-main"><section class="login-card"><div class="login-header"><h1>Vinlager Manager</h1><p class="muted">Din personlige vinlagerstyring</p></div><div class="login-tabs"><button class="login-tab active" data-tab="login">Log ind</button><button class="login-tab" data-tab="signup">Opret konto</button></div><div id="loginPanel" class="login-panel active"><form id="loginForm">${label('Email',input('email','email','',true))}${label('Kodeord',input('password','password','',true))}<button class="btn login-submit-btn" type="submit">Log ind</button></form><p id="loginStatus" class="login-status"></p><button type="button" id="forgotPasswordBtn" class="link-btn">Glemt kodeord?</button></div><div id="signupPanel" class="login-panel"><form id="signupForm">${label('Navn',input('name','text','',true))}${label('Email',input('email','email','',true))}${label('Kodeord (min. 6 tegn)',input('password','password','',true))}<button class="btn login-submit-btn" type="submit">Opret konto</button></form><p id="signupStatus" class="login-status"></p></div><div id="recoveryPanel" class="login-panel"><p class="muted">Indtast din email, så sender vi et link til at nulstille dit kodeord.</p><form id="recoveryForm">${label('Email',input('email','email','',true))}<button class="btn login-submit-btn" type="submit">Send nulstillingslink</button></form><p id="recoveryStatus" class="login-status"></p><button type="button" id="backToLoginBtn" class="link-btn">&larr; Tilbage til login</button></div></section></main>`;
 }
 
 function importBlock(){
@@ -501,29 +505,55 @@ function bindRegion(countrySelector, regionSelector, customWrapId, customInputNa
 }
 
 function attachHandlers(path,s){
-  const logout = document.getElementById('logoutBtn'); if(logout) logout.onclick = ()=>{ clearSession(); navigate('/login'); };
+  const logout = document.getElementById('logoutBtn'); if(logout) logout.onclick = async ()=>{ try { await identityLogout(); } catch(e) {} _identityUser = null; navigate('/login'); };
 
   if(path === '/login'){
-    const loginForm = document.getElementById('loginForm');
-    const registerForm = document.getElementById('registerForm');
-    const verifyForm = document.getElementById('verifyForm');
+    document.querySelectorAll('.login-tab').forEach(tab => {
+      tab.onclick = () => {
+        document.querySelectorAll('.login-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.login-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        const panel = document.getElementById(tab.dataset.tab + 'Panel');
+        if (panel) panel.classList.add('active');
+      };
+    });
 
-    if(loginForm) loginForm.onsubmit = (e)=>{ e.preventDefault(); const fd=new FormData(loginForm); const u=usersStore().find((x)=>x.username===fd.get('username')&&x.password===fd.get('password')&&x.active); const status=document.getElementById('loginStatus'); if(!u) return status.textContent='Forkert login eller bruger deaktiveret.'; if(!u.verified) return status.textContent='Email ikke verificeret.'; setSession(u.id); navigate(u.role==='admin'?'/admin':'/'); };
-    if(registerForm) registerForm.onsubmit = (e)=>{ e.preventDefault(); const fd=new FormData(registerForm); const users=usersStore(); const status=document.getElementById('registerStatus'); if(users.some((x)=>x.email===fd.get('email'))) return status.textContent='Email findes allerede.'; if(users.some((x)=>x.username===fd.get('username'))) return status.textContent='Brugernavn findes allerede.'; const code=String(Math.floor(100000+Math.random()*900000)); users.push({id:uid(),email:fd.get('email'),username:fd.get('username'),password:fd.get('password'),role:'user',active:true,verified:false,verificationCode:code}); saveUsers(users); status.textContent=`Verifikationskode (demo): ${code}`; };
-    if(verifyForm) verifyForm.onsubmit = (e)=>{ e.preventDefault(); const fd=new FormData(verifyForm); const users=usersStore(); const i=users.findIndex((x)=>x.email===fd.get('email')); const status=document.getElementById('verifyStatus'); if(i<0) return status.textContent='Email findes ikke.'; if(users[i].verificationCode!==fd.get('code')) return status.textContent='Forkert kode.'; users[i].verified=true; delete users[i].verificationCode; saveUsers(users); status.textContent='Email verificeret.'; };
+    const forgotBtn = document.getElementById('forgotPasswordBtn');
+    if (forgotBtn) forgotBtn.onclick = () => {
+      document.querySelectorAll('.login-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.login-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('recoveryPanel').classList.add('active');
+    };
+
+    const backBtn = document.getElementById('backToLoginBtn');
+    if (backBtn) backBtn.onclick = () => {
+      document.querySelectorAll('.login-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.login-tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('loginPanel').classList.add('active');
+      const loginTab = document.querySelector('[data-tab="login"]');
+      if (loginTab) loginTab.classList.add('active');
+    };
+
+    const loginForm = document.getElementById('loginForm');
+    if(loginForm) loginForm.onsubmit = async (e)=>{ e.preventDefault(); const fd=new FormData(loginForm); const status=document.getElementById('loginStatus'); const btn=loginForm.querySelector('button[type="submit"]'); btn.disabled=true; btn.textContent='Logger ind...'; try { const user = await identityLogin(fd.get('email'), fd.get('password')); _identityUser = mapIdentityUser(user); navigate(_identityUser.role==='admin'?'/admin':'/'); } catch(error) { if(error instanceof AuthError){ status.textContent = error.status===401?'Forkert email eller kodeord.':error.message; } else { status.textContent='Der opstod en fejl. Prøv igen.'; } status.className='login-status error'; } finally { btn.disabled=false; btn.textContent='Log ind'; } };
+
+    const signupForm = document.getElementById('signupForm');
+    if(signupForm) signupForm.onsubmit = async (e)=>{ e.preventDefault(); const fd=new FormData(signupForm); const status=document.getElementById('signupStatus'); const btn=signupForm.querySelector('button[type="submit"]'); btn.disabled=true; btn.textContent='Opretter...'; try { const user = await identitySignup(fd.get('email'), fd.get('password'), { full_name: fd.get('name') }); if(user.emailVerified){ _identityUser = mapIdentityUser(user); navigate('/'); } else { status.textContent='Konto oprettet! Tjek din email for at bekræfte din konto.'; status.className='login-status success'; } } catch(error) { if(error instanceof AuthError){ if(error.status===403) status.textContent='Oprettelse er ikke tilladt for denne side.'; else if(error.status===422) status.textContent='Ugyldig email eller kodeord (min. 6 tegn).'; else status.textContent=error.message; } else { status.textContent='Der opstod en fejl. Prøv igen.'; } status.className='login-status error'; } finally { btn.disabled=false; btn.textContent='Opret konto'; } };
+
+    const recoveryForm = document.getElementById('recoveryForm');
+    if(recoveryForm) recoveryForm.onsubmit = async (e)=>{ e.preventDefault(); const fd=new FormData(recoveryForm); const status=document.getElementById('recoveryStatus'); try { await requestPasswordRecovery(fd.get('email')); status.textContent='Nulstillingslink sendt! Tjek din email.'; status.className='login-status success'; } catch(error) { status.textContent = error instanceof AuthError ? error.message : 'Der opstod en fejl.'; status.className='login-status error'; } };
+
+    const resetForm = document.getElementById('resetForm');
+    if(resetForm) resetForm.onsubmit = async (e)=>{ e.preventDefault(); const fd=new FormData(resetForm); const status=document.getElementById('resetStatus'); try { await updateUser({ password: fd.get('password') }); _authCallbackResult = null; status.textContent='Kodeord opdateret! Omdirigerer...'; status.className='login-status success'; setTimeout(()=>navigate('/'), 1500); } catch(error) { status.textContent = error instanceof AuthError ? error.message : 'Der opstod en fejl.'; status.className='login-status error'; } };
   }
 
   if(path === '/admin'){
-    const status = document.getElementById('adminStatus');
-    const createForm = document.getElementById('adminCreateUserForm');
-    const editForm = document.getElementById('adminEditUserForm');
-    if(createForm) createForm.onsubmit = (e)=>{ e.preventDefault(); const fd=new FormData(createForm); const users=usersStore(); if(users.some((x)=>x.email===fd.get('email'))) return status.textContent='Email findes allerede.'; users.push({id:uid(),email:fd.get('email'),username:fd.get('username'),password:fd.get('password'),role:fd.get('role')||'user',active:true,verified:true}); saveUsers(users); status.textContent='Bruger oprettet.'; render(); };
-    if(editForm) editForm.onsubmit = (e)=>{ e.preventDefault(); const fd=new FormData(editForm); const users=usersStore(); const i=users.findIndex((x)=>x.id===fd.get('userId')); if(i<0) return; if(fd.get('email')) users[i].email=fd.get('email'); if(fd.get('username')) users[i].username=fd.get('username'); if(fd.get('password')) users[i].password=fd.get('password'); if(fd.get('role')) users[i].role=fd.get('role'); users[i].active=fd.get('active')!=='Nej'; users[i].verified=fd.get('verified')!=='Nej'; saveUsers(users); status.textContent='Bruger opdateret.'; render(); };
+    // Admin page is informational only - user management is via Netlify dashboard
   }
 
   if(path === '/profile'){
     const form = document.getElementById('profileForm');
-    if(form) form.onsubmit=(e)=>{ e.preventDefault(); const fd=new FormData(form); const users=usersStore(); const me=currentUser(); const i=users.findIndex((x)=>x.id===me.id); if(i<0) return; users[i].username=fd.get('username'); users[i].email=fd.get('email'); if(fd.get('password')) users[i].password=fd.get('password'); saveUsers(users); document.getElementById('profileStatus').textContent='Profil opdateret.'; };
+    if(form) form.onsubmit=async (e)=>{ e.preventDefault(); const fd=new FormData(form); const status=document.getElementById('profileStatus'); try { const updates = { data: { full_name: fd.get('username') } }; if(fd.get('password')) updates.password = fd.get('password'); await updateUser(updates); const u = await getUser(); _identityUser = mapIdentityUser(u); status.textContent='Profil opdateret.'; } catch(error) { status.textContent = error instanceof AuthError ? error.message : 'Der opstod en fejl.'; } };
   }
 
   if(path === '/wines'){
@@ -648,10 +678,7 @@ function attachHandlers(path,s){
 }
 
 function render(){
-  usersStore();
   if(!currentUser() && location.pathname !== '/login') history.replaceState({}, '', '/login');
-  const user = currentUser();
-  if(location.pathname !== '/login' && user?.role === 'admin' && location.pathname !== '/admin') history.replaceState({}, '', '/admin');
 
   const s = store();
   const p = location.pathname;
@@ -664,11 +691,35 @@ function render(){
   else if(/^\/tastings\//.test(p)) html = tastingDetailPage(s, p.split('/')[2]);
   else if(p === '/new') html = createPage();
   else if(p === '/profile') html = profilePage();
-  else if(p === '/admin') html = user?.role === 'admin' ? adminPage() : shell('<section class="card"><h2>Ingen adgang</h2></section>', '/');
+  else if(p === '/admin') html = currentUser()?.role === 'admin' ? adminPage() : shell('<section class="card"><h2>Ingen adgang</h2></section>', '/');
   else html = shell('<p>Side ikke fundet.</p>', '/');
 
   document.getElementById('app').innerHTML = html;
   attachHandlers(p, s);
 }
 
-render();
+async function initAuth() {
+  try {
+    const result = await handleAuthCallback();
+    if (result) {
+      _authCallbackResult = result;
+      if (result.user) _identityUser = mapIdentityUser(result.user);
+    }
+  } catch (e) {
+    console.error('Auth callback error:', e);
+  }
+
+  if (!_identityUser) {
+    const u = await getUser();
+    _identityUser = mapIdentityUser(u);
+  }
+
+  onAuthChange((event, user) => {
+    _identityUser = mapIdentityUser(user);
+    if (event === AUTH_EVENTS.LOGIN || event === AUTH_EVENTS.LOGOUT || event === AUTH_EVENTS.USER_UPDATED) render();
+  });
+
+  render();
+}
+
+initAuth();

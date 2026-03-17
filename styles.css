@@ -22,5 +22,11 @@ label span{display:block;font-size:12px;color:#5f5762;font-weight:600;margin-bot
 .signal{display:inline-block;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:700}.sig-red{background:#ffe5e8;color:#b3002d}.sig-orange{background:#fff0dd;color:#ad5f00}.sig-green{background:#e9fbe9;color:#0f7b2a}
 .badge{display:inline-block;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:700}.badge.active{background:#e7faef;color:#126d34}.badge.archived{background:#ececec;color:#555}
 .mini-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0ebef}
-.login-main{min-height:100vh;display:grid;place-items:center;padding:20px}.login-card{width:min(560px,100%);background:#fff;border:1px solid #e5dee3;border-radius:18px;padding:22px;box-shadow:0 8px 24px #00000014}.login-card h1{color:#9d073d;margin-top:0}
+.login-main{min-height:100vh;display:grid;place-items:center;padding:20px}.login-card{width:min(460px,100%);background:#fff;border:1px solid #e5dee3;border-radius:18px;padding:28px 24px;box-shadow:0 8px 24px #00000014}.login-card h1{color:#9d073d;margin-top:0}
+.login-header{text-align:center;margin-bottom:20px}.login-header h1{margin-bottom:4px}.login-header p{margin-top:0}
+.login-tabs{display:flex;border-bottom:2px solid #e5dee3;margin-bottom:18px}.login-tab{flex:1;background:none;border:none;padding:10px 0;font-size:15px;font-weight:600;color:#6b6470;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .2s,border-color .2s}.login-tab.active{color:#9d073d;border-bottom-color:#9d073d}
+.login-panel{display:none}.login-panel.active{display:block}
+.login-submit-btn{width:100%;padding:12px;font-size:15px;margin-top:4px}
+.login-status{min-height:20px;font-size:13px;margin:8px 0 4px}.login-status.error{color:#b3002d}.login-status.success{color:#0f7b2a}
+.link-btn{background:none;border:none;color:#9d073d;cursor:pointer;font-size:13px;padding:4px 0;text-decoration:underline}
 @media(max-width:900px){.cols2,.cols3{grid-template-columns:1fr}.top-row{flex-direction:column;align-items:flex-start}.timeline-wrap:before{left:10px}.timeline-item{width:100%;left:0;padding-left:34px}.timeline-item.left .dot,.timeline-item.right .dot{left:1px;right:auto}}
