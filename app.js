@@ -1,4 +1,7 @@
-const STORAGE_KEY = 'winecellar.v2';
+const IDENTITY_URL = '/.netlify/identity';
+const API_URL = '/.netlify/functions/wines';
+const TOKEN_KEY = 'winecellar.auth';
+
 const descriptors = [
   ['jordbaer', 'Jordbær', 'Frugt'], ['kirsebaer', 'Kirsebær', 'Frugt'], ['hindbaer', 'Hindbær', 'Frugt'],
   ['citrus', 'Citrus', 'Frugt'], ['lime', 'Lime', 'Frugt'], ['stenfrugt', 'Stenfrugt', 'Frugt'],
@@ -17,10 +20,143 @@ const defaultProfiles = {
 
 const seed = { wines: [], purchases: [], drinkLogs: [], grapeProfiles: defaultProfiles };
 const uid = () => Math.random().toString(36).slice(2, 10);
-const store = () => JSON.parse(localStorage.getItem(STORAGE_KEY) || JSON.stringify(seed));
-const save = (s) => localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
 
+/* ── Auth state ─────────────────────────────────────────── */
+let currentUser = null;
+let authToken = null;
+let refreshToken = null;
+let dataCache = null;
+
+function loadAuthFromStorage() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TOKEN_KEY));
+    if (saved && saved.access_token) {
+      authToken = saved.access_token;
+      refreshToken = saved.refresh_token;
+      currentUser = saved.user || null;
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+function saveAuthToStorage(tokenData) {
+  authToken = tokenData.access_token;
+  refreshToken = tokenData.refresh_token;
+  currentUser = tokenData.user || currentUser;
+  localStorage.setItem(TOKEN_KEY, JSON.stringify({ access_token: authToken, refresh_token: refreshToken, user: currentUser }));
+}
+
+function clearAuth() {
+  currentUser = null;
+  authToken = null;
+  refreshToken = null;
+  dataCache = null;
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+async function doLogin(email, password) {
+  const res = await fetch(`${IDENTITY_URL}/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=password&username=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error_description || err.msg || 'Login fejlede');
+  }
+  const data = await res.json();
+  // Fetch user profile
+  const userRes = await fetch(`${IDENTITY_URL}/user`, { headers: { Authorization: `Bearer ${data.access_token}` } });
+  if (userRes.ok) data.user = await userRes.json();
+  saveAuthToStorage(data);
+}
+
+async function doSignup(email, password) {
+  const res = await fetch(`${IDENTITY_URL}/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error_description || err.msg || 'Oprettelse fejlede');
+  }
+  const user = await res.json();
+  if (user.confirmed_at || user.email_verified) {
+    // Autoconfirm is on — log in immediately
+    await doLogin(email, password);
+  }
+  return user;
+}
+
+async function doRefreshToken() {
+  if (!refreshToken) return false;
+  try {
+    const res = await fetch(`${IDENTITY_URL}/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    data.user = currentUser;
+    saveAuthToStorage(data);
+    return true;
+  } catch { return false; }
+}
+
+/* ── Data sync (Netlify Blobs via function) ─────────────── */
+async function apiFetch(url, options = {}) {
+  const headers = { ...options.headers };
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+  let res = await fetch(url, { ...options, headers });
+  // If unauthorized, try refreshing the token once
+  if (res.status === 401 && refreshToken) {
+    const refreshed = await doRefreshToken();
+    if (refreshed) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+      res = await fetch(url, { ...options, headers });
+    }
+  }
+  return res;
+}
+
+async function loadData() {
+  try {
+    const res = await apiFetch(API_URL);
+    if (res.ok) {
+      const data = await res.json();
+      dataCache = data && data.wines ? data : { ...seed };
+    } else if (res.status === 401) {
+      clearAuth();
+      render();
+      return seed;
+    } else {
+      dataCache = { ...seed };
+    }
+  } catch {
+    dataCache = { ...seed };
+  }
+  return dataCache;
+}
+
+function saveData(data) {
+  dataCache = data;
+  // Fire-and-forget save to server for snappy UI
+  apiFetch(API_URL, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).catch(() => {});
+}
+
+const store = () => dataCache || { ...seed };
+const save = (s) => saveData(s);
+
+/* ── UI helpers ─────────────────────────────────────────── */
 function shell(content, active = '/') {
+  const userEmail = currentUser?.email || '';
   return `
   <header class="topbar">
     <div class="container top-row">
@@ -29,12 +165,34 @@ function shell(content, active = '/') {
         ${pill('/', 'Dashboard', active)}
         ${pill('/wines', 'Alle vine', active)}
         ${pill('/new', 'Tilføj data', active)}
+        <span class="user-info">${userEmail}</span>
+        <a href="#" id="logoutBtn" class="pill">Log ud</a>
       </nav>
     </div>
   </header>
   <main class="container">${content}</main>`;
 }
 const pill = (path, label, active) => `<a href="${path}" class="pill ${active === path ? 'active' : ''}" data-link>${label}</a>`;
+
+function authPage() {
+  return `
+  <div class="container" style="max-width:420px;margin:80px auto">
+    <div class="card">
+      <h2 style="text-align:center">Vinlager Manager 🍷</h2>
+      <p id="authError" style="color:#c0392b;display:none"></p>
+      <div id="authTabs" style="display:flex;gap:8px;margin-bottom:16px">
+        <button class="btn dark" id="tabLogin" style="flex:1">Log ind</button>
+        <button class="btn" id="tabSignup" style="flex:1">Opret konto</button>
+      </div>
+      <form id="authForm">
+        <label>E-mail<input name="email" type="email" class="input" required /></label>
+        <label>Adgangskode<input name="password" type="password" class="input" required minlength="6" /></label>
+        <button class="btn dark" type="submit" id="authSubmit" style="width:100%;margin-top:12px">Log ind</button>
+      </form>
+      <p id="authMsg" style="color:#27ae60;display:none"></p>
+    </div>
+  </div>`;
+}
 
 function navigate(path) { history.pushState({}, '', path); render(); }
 document.addEventListener('click', (e) => {
@@ -45,6 +203,7 @@ document.addEventListener('click', (e) => {
 });
 window.addEventListener('popstate', render);
 
+/* ── Page renderers (unchanged logic) ──────────────────── */
 function bottlesLeft(s, wineId) {
   const bought = s.purchases.filter((p) => p.wineId === wineId).reduce((n, p) => n + Number(p.quantity || 0), 0);
   const used = s.drinkLogs.filter((d) => d.wineId === wineId).reduce((n, d) => n + Number(d.bottlesConsumed || 0), 0);
@@ -135,7 +294,12 @@ function newPage(s) {
   `, '/new');
 }
 
+/* ── Event handlers ────────────────────────────────────── */
 function attachHandlers(path, s) {
+  // Logout button
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) logoutBtn.onclick = (e) => { e.preventDefault(); clearAuth(); render(); };
+
   if (path === '/wines') {
     const list = document.getElementById('wine-list');
     const empty = document.getElementById('empty');
@@ -195,6 +359,63 @@ function attachHandlers(path, s) {
   }
 }
 
+function attachAuthHandlers() {
+  let mode = 'login';
+  const form = document.getElementById('authForm');
+  const errEl = document.getElementById('authError');
+  const msgEl = document.getElementById('authMsg');
+  const submitBtn = document.getElementById('authSubmit');
+  const tabLogin = document.getElementById('tabLogin');
+  const tabSignup = document.getElementById('tabSignup');
+
+  function setMode(m) {
+    mode = m;
+    submitBtn.textContent = m === 'login' ? 'Log ind' : 'Opret konto';
+    tabLogin.className = m === 'login' ? 'btn dark' : 'btn';
+    tabSignup.className = m === 'signup' ? 'btn dark' : 'btn';
+    errEl.style.display = 'none';
+    msgEl.style.display = 'none';
+  }
+
+  tabLogin.onclick = () => setMode('login');
+  tabSignup.onclick = () => setMode('signup');
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    errEl.style.display = 'none';
+    msgEl.style.display = 'none';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Vent...';
+    const fd = new FormData(form);
+    const email = fd.get('email');
+    const password = fd.get('password');
+    try {
+      if (mode === 'login') {
+        await doLogin(email, password);
+        await loadData();
+        render();
+      } else {
+        const user = await doSignup(email, password);
+        if (currentUser) {
+          // Auto-confirmed and logged in
+          await loadData();
+          render();
+        } else {
+          msgEl.textContent = 'Tjek din e-mail for at bekræfte din konto.';
+          msgEl.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Opret konto';
+        }
+      }
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = mode === 'login' ? 'Log ind' : 'Opret konto';
+    }
+  };
+}
+
 function dl(name, content, type = 'text/csv') {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([content], { type }));
@@ -202,7 +423,16 @@ function dl(name, content, type = 'text/csv') {
   a.click();
 }
 
+/* ── Main render ───────────────────────────────────────── */
 function render() {
+  const app = document.getElementById('app');
+
+  if (!currentUser || !authToken) {
+    app.innerHTML = authPage();
+    attachAuthHandlers();
+    return;
+  }
+
   const s = store();
   const path = location.pathname;
   let html = '';
@@ -211,8 +441,48 @@ function render() {
   else if (path.startsWith('/wines/')) html = wineDetail(s, path.split('/')[2]);
   else if (path === '/new') html = newPage(s);
   else html = shell('<p>Side ikke fundet.</p>');
-  document.getElementById('app').innerHTML = html;
+  app.innerHTML = html;
   attachHandlers(path, s);
 }
 
-render();
+/* ── Boot ──────────────────────────────────────────────── */
+async function handleHashCallback() {
+  const hash = window.location.hash;
+  if (!hash) return;
+  const params = new URLSearchParams(hash.substring(1));
+  const confirmationToken = params.get('confirmation_token');
+  const recoveryToken = params.get('recovery_token');
+
+  if (confirmationToken) {
+    try {
+      await fetch(`${IDENTITY_URL}/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: confirmationToken, type: 'signup' })
+      });
+    } catch {}
+    window.location.hash = '';
+  }
+  if (recoveryToken) {
+    try {
+      await fetch(`${IDENTITY_URL}/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: recoveryToken, type: 'recovery' })
+      });
+    } catch {}
+    window.location.hash = '';
+  }
+}
+
+async function boot() {
+  const app = document.getElementById('app');
+  await handleHashCallback();
+  if (loadAuthFromStorage()) {
+    app.innerHTML = '<div class="container" style="text-align:center;margin-top:100px"><p>Indlæser data...</p></div>';
+    await loadData();
+  }
+  render();
+}
+
+boot();
