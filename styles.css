@@ -15,10 +15,10 @@ label span{display:block;font-size:12px;color:#5f5762;font-weight:600;margin-bot
 .wine-card{text-decoration:none;color:inherit}.wine-card h3{margin-top:4px}.archived-card{opacity:.65;filter:grayscale(0.2)}
 .flag{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:999px;background:#f3eef3}
 .row-gap{display:flex;flex-wrap:wrap;gap:10px}.muted{color:#6b6470}.mt{margin-top:12px}
-.timeline-wrap{position:relative;padding:10px 0}.timeline-wrap:before{content:'';position:absolute;left:50%;top:0;bottom:0;border-left:3px dotted #bcb6bf}
+.timeline-wrap{position:relative;padding:10px 0}.timeline-wrap:before{content:'';position:absolute;left:50%;top:0;bottom:0;border-left:3px solid #d8d0d7}
 .timeline-item{position:relative;width:50%;padding:8px 22px;text-decoration:none;color:inherit;display:block}.timeline-item.left{left:0}.timeline-item.right{left:50%}
-.dot{position:absolute;top:22px;width:20px;height:20px;border-radius:50%;background:#8ea3a3;border:3px solid #fff;box-shadow:0 0 0 2px #bfc7c7}.timeline-item.left .dot{right:-10px}.timeline-item.right .dot{left:-10px}
-.timeline-card{background:#f8f6f9;border:1px solid #e4dee7;border-radius:12px;padding:10px}
+.dot{position:absolute;top:22px;width:18px;height:18px;border-radius:50%;background:#8ea3a3;border:3px solid #fff;box-shadow:0 0 0 2px #bfc7c7}.timeline-item.left .dot{right:-9px}.timeline-item.right .dot{left:-9px}
+.timeline-card{background:#f8f6f9;border:1px solid #e4dee7;border-left:4px solid #b04a74;border-radius:12px;padding:10px 12px;box-shadow:0 4px 14px #0000000f}
 .signal{display:inline-block;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:700}.sig-red{background:#ffe5e8;color:#b3002d}.sig-orange{background:#fff0dd;color:#ad5f00}.sig-green{background:#e9fbe9;color:#0f7b2a}
 .badge{display:inline-block;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:700}.badge.active{background:#e7faef;color:#126d34}.badge.archived{background:#ececec;color:#555}
 .mini-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0ebef}

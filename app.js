@@ -347,13 +347,18 @@ function tastingForm() {
   return `<form id="logForm" class="card"><h3>Log smagning (WSET Level 2)</h3><div class="grid cols3">${label('Dato', input('date','date',new Date().toISOString().slice(0,10),true))}${label('Antal flasker åbnet', input('bottlesConsumed','number',1,true,1))}${fields.map(([n,t,o])=>label(t,select(n,o,'',true))).join('')}</div>${renderWsetDescriptors()}${label('Blev den drukket sammen med mad?', select('withFood',['Ja','Nej'],'Nej',true))}${label('Mad-note (fritekst)', input('foodPairing'))}${label('Note (fritekst)', `<textarea class="input" name="notes" rows="3"></textarea>`)}<button class="btn" type="submit">Gem smagning</button></form>`;
 }
 
+
+function renderTastingTimeline(logs) {
+  return `<div class="timeline-wrap">${logs.map((l,i)=>`<a href="/tastings/${l.id}" data-link class="timeline-item ${i % 2 ? 'right' : 'left'}"><span class="dot"></span><div class="timeline-card"><h4>Smagning ${i+1}</h4><p><b>Dato:</b> ${l.date}</p><p><b>Kvalitet:</b> ${l.quality}</p><p><b>Udviklingsniveau:</b> ${l.developmentLevel}</p><p><b>Note:</b> ${(l.notes||'-').slice(0,100)}</p></div></a>`).join('')}</div>`;
+}
+
 function wineDetail(s, id) {
   const w = wineById(s, id); if (!w) return shell('<p>Vin ikke fundet.</p>', '/wines');
   const st = getWineStats(s, id);
   const purchases = s.purchases.filter((p)=>p.wineId===id).sort((a,b)=>new Date(b.purchaseDate||0)-new Date(a.purchaseDate||0));
   const events = inventoryEventsForWine(s,id).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
   const logs = s.drinkLogs.filter((l)=>l.wineId===id).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
-  return shell(`<section class="card"><h2>${w.producer} — ${w.wineName}</h2><p>${w.vintage} · ${w.country}/${w.region} · ${w.primaryGrape} · ${badgeStatus(w)}</p><p>Flasker tilbage: <b>${st.left}</b></p><a class="btn" href="/wines/${id}/edit" data-link>Rediger vin</a></section><section class="grid cols2"><article class="card"><h3>Købshistorik</h3>${purchases.length?purchases.map((p)=>`<p>${p.purchaseDate} · ${p.quantity} fl. · ${p.price} ${p.currency} · ${p.location} · ${p.bottleVolumeMl||'-'} ml · ${p.packagingStatus||'-'} · ${p.note||''}</p>`).join(''):'<p>Ingen køb.</p>'}</article><article class="card"><h3>Lagerhændelser</h3>${events.length?events.map((e)=>`<p>${e.date} · ${e.type} · ${e.quantity||0} · ${e.note||''}</p>`).join(''):'<p>Ingen hændelser.</p>'}</article></section><section class="card"><h3>Smagningshistorik</h3>${logs.length?logs.map((l,i)=>`<p><a href="/tastings/${l.id}" data-link>Smagning ${i+1}</a> · ${l.date} · ${l.quality} · ${l.developmentLevel} · ${l.notes||'-'}</p>`).join(''):'<p>Ingen smagninger.</p>'}</section>${tastingForm()}`, '/wines');
+  return shell(`<section class="card"><h2>${w.producer} — ${w.wineName}</h2><p>${w.vintage} · ${w.country}/${w.region} · ${w.primaryGrape} · ${badgeStatus(w)}</p><p>Flasker tilbage: <b>${st.left}</b></p><a class="btn" href="/wines/${id}/edit" data-link>Rediger vin</a></section><section class="grid cols2"><article class="card"><h3>Købshistorik</h3>${purchases.length?purchases.map((p)=>`<p>${p.purchaseDate} · ${p.quantity} fl. · ${p.price} ${p.currency} · ${p.location} · ${p.bottleVolumeMl||'-'} ml · ${p.packagingStatus||'-'} · ${p.note||''}</p>`).join(''):'<p>Ingen køb.</p>'}</article><article class="card"><h3>Lagerhændelser</h3>${events.length?events.map((e)=>`<p>${e.date} · ${e.type} · ${e.quantity||0} · ${e.note||''}</p>`).join(''):'<p>Ingen hændelser.</p>'}</article></section><section class="card"><h3>Smagningshistorik</h3>${logs.length?renderTastingTimeline(logs):'<p>Ingen smagninger.</p>'}</section>${tastingForm()}`, '/wines');
 }
 
 function editWinePage(s, id) {
