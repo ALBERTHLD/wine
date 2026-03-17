@@ -5,4 +5,6 @@ main{padding:24px 20px}.card{background:#fff;border:1px solid #e5dee3;border-rad
 .grid{display:grid;gap:14px}.cols2{grid-template-columns:repeat(2,minmax(0,1fr))}.cols3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .input{width:100%;border:1px solid #d5ced5;border-radius:12px;padding:10px 12px;margin:5px 0 10px}.btn{display:inline-block;border:0;border-radius:12px;padding:10px 14px;color:#fff;background:linear-gradient(120deg,#810337,#d6004f);text-decoration:none;cursor:pointer;margin-right:8px}.btn.dark{background:#121723}
 .chips{display:flex;flex-wrap:wrap;gap:8px}.chip{display:inline-block;background:#f2eef2;color:#5c4350;border-radius:999px;padding:6px 10px;font-size:13px}.wine-card{text-decoration:none;color:inherit}
+.user-info{font-size:13px;color:#777;margin-left:12px}
+#logoutBtn{font-size:13px;background:#eee;color:#666;cursor:pointer}
 @media(max-width:900px){.cols2,.cols3{grid-template-columns:1fr}.top-row{flex-direction:column;align-items:flex-start}}
